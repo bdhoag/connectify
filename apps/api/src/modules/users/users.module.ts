@@ -18,6 +18,6 @@ import { UsersController } from './presentation/controllers/users.controller';
     UpdateUserUseCase,
     DeleteUserUseCase,
   ],
-  exports: [USER_REPOSITORY],
+  exports: [USER_REPOSITORY, FindUserByIdUseCase],
 })
 export class UsersModule {}
