@@ -9,6 +9,8 @@ import {
   ParseUUIDPipe,
   Post,
 } from '@nestjs/common';
+import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { AssignRoleDto } from '../../application/dto/assign-role.dto';
 import { AssignRoleUseCase } from '../../application/use-cases/assign-role.use-case';
 import { FindAllRolesUseCase } from '../../application/use-cases/find-all-roles.use-case';
@@ -39,18 +41,20 @@ export class RolesController {
 
   @Post('users/:userId/roles')
   assign(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: AssignRoleDto,
   ) {
-    return this.assignRoleUseCase.execute(userId, dto);
+    return this.assignRoleUseCase.execute(user.id, userId, dto);
   }
 
   @Delete('users/:userId/roles/:roleId')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Param('roleId', ParseUUIDPipe) roleId: string,
   ) {
-    return this.removeRoleUseCase.execute(userId, roleId);
+    return this.removeRoleUseCase.execute(user.id, userId, roleId);
   }
 }
