@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { UserPolicy } from '../../../users/domain/policies/user.policy';
 import { NOTIFICATION_REPOSITORY } from '../../domain/repositories/notification.repository';
 import type { NotificationRepository } from '../../domain/repositories/notification.repository';
 
@@ -9,7 +10,12 @@ export class MarkAllNotificationsReadUseCase {
     private readonly notificationRepository: NotificationRepository,
   ) {}
 
-  execute(userId: string): Promise<void> {
+  async execute(actorId: string, userId: string): Promise<void> {
+    if (!UserPolicy.canManage(actorId, userId)) {
+      throw new ForbiddenException(
+        'You can only manage your own notifications',
+      );
+    }
     return this.notificationRepository.markAllRead(userId);
   }
 }

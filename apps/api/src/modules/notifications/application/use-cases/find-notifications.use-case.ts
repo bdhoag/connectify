@@ -18,9 +18,13 @@ export class FindNotificationsUseCase {
     private readonly notificationRepository: NotificationRepository,
   ) {}
 
-  execute(query: QueryNotificationDto): Promise<CursorPage<NotificationEntity>> {
+  // Always scoped to the caller's own inbox.
+  execute(
+    userId: string,
+    query: QueryNotificationDto,
+  ): Promise<CursorPage<NotificationEntity>> {
     return this.notificationRepository.findForUser({
-      userId: query.userId,
+      userId,
       unreadOnly: query.unreadOnly,
       cursor: query.cursor ? new Date(query.cursor) : undefined,
       limit: query.limit ?? DEFAULT_LIMIT,

@@ -11,7 +11,10 @@ export class CreateNotificationUseCase {
     private readonly notificationRepository: NotificationRepository,
   ) {}
 
-  execute(dto: CreateNotificationDto): Promise<NotificationEntity> {
-    return this.notificationRepository.create(dto);
+  execute(
+    actorId: string,
+    dto: CreateNotificationDto,
+  ): Promise<NotificationEntity> {
+    return this.notificationRepository.create({ ...dto, actorId });
   }
 }
