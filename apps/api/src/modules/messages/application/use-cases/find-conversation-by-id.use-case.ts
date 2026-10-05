@@ -1,10 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   ConversationEntity,
   ConversationMemberEntity,
 } from '../../domain/entities/conversation.entity';
-import { CONVERSATION_REPOSITORY } from '../../domain/repositories/conversation.repository';
-import type { ConversationRepository } from '../../domain/repositories/conversation.repository';
+import { ConversationAuthorizer } from '../services/conversation-authorizer';
 
 export interface ConversationWithMembers extends ConversationEntity {
   members: ConversationMemberEntity[];
@@ -13,17 +12,12 @@ export interface ConversationWithMembers extends ConversationEntity {
 @Injectable()
 export class FindConversationByIdUseCase {
   constructor(
-    @Inject(CONVERSATION_REPOSITORY)
-    private readonly conversationRepository: ConversationRepository,
+    private readonly conversationAuthorizer: ConversationAuthorizer,
   ) {}
 
-  async execute(id: string): Promise<ConversationWithMembers> {
-    const conversation = await this.conversationRepository.findById(id);
-    if (!conversation) {
-      throw new NotFoundException(`Conversation with id "${id}" not found`);
-    }
-
-    const members = await this.conversationRepository.findMembers(id);
+  async execute(userId: string, id: string): Promise<ConversationWithMembers> {
+    const { conversation, members } =
+      await this.conversationAuthorizer.assertCanAccess(userId, id);
     return { ...conversation, members };
   }
 }

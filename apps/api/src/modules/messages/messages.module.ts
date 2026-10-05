@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AddMemberUseCase } from './application/use-cases/add-member.use-case';
+import { ConversationAuthorizer } from './application/services/conversation-authorizer';
 import { CreateConversationUseCase } from './application/use-cases/create-conversation.use-case';
 import { DeleteMessageUseCase } from './application/use-cases/delete-message.use-case';
 import { FindConversationByIdUseCase } from './application/use-cases/find-conversation-by-id.use-case';
@@ -23,6 +24,7 @@ import { MessagesController } from './presentation/controllers/messages.controll
       useClass: DrizzleConversationRepository,
     },
     { provide: MESSAGE_REPOSITORY, useClass: DrizzleMessageRepository },
+    ConversationAuthorizer,
     CreateConversationUseCase,
     FindConversationByIdUseCase,
     FindConversationsForUserUseCase,
