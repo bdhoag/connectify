@@ -1,5 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { PaginationQueryDto } from '../../../../common/dto/pagination-query.dto';
+import { UserPolicy } from '../../../users/domain/policies/user.policy';
 import { BlockEntity } from '../../domain/entities/block.entity';
 import { BLOCK_REPOSITORY } from '../../domain/repositories/block.repository';
 import type { BlockRepository } from '../../domain/repositories/block.repository';
@@ -23,10 +24,16 @@ export class FindBlockedUsersUseCase {
     @Inject(BLOCK_REPOSITORY) private readonly blockRepository: BlockRepository,
   ) {}
 
+  // A block list is private: only its owner may read it.
   async execute(
+    actorId: string,
     blockerId: string,
     query: PaginationQueryDto,
   ): Promise<PaginatedBlocks> {
+    if (!UserPolicy.canManage(actorId, blockerId)) {
+      throw new ForbiddenException('You can only view your own block list');
+    }
+
     const page = query.page ?? DEFAULT_PAGE;
     const limit = query.limit ?? DEFAULT_LIMIT;
 

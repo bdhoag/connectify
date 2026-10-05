@@ -1,7 +1,13 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { USER_REPOSITORY } from '../../../users/domain/repositories/user.repository';
 import type { UserRepository } from '../../../users/domain/repositories/user.repository';
 import { RoleEntity } from '../../domain/entities/role.entity';
+import { RolePolicy } from '../../domain/policies/role.policy';
 import { ROLE_REPOSITORY } from '../../domain/repositories/role.repository';
 import type { RoleRepository } from '../../domain/repositories/role.repository';
 import { AssignRoleDto } from '../dto/assign-role.dto';
@@ -13,7 +19,16 @@ export class AssignRoleUseCase {
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
   ) {}
 
-  async execute(userId: string, dto: AssignRoleDto): Promise<RoleEntity[]> {
+  async execute(
+    actorId: string,
+    userId: string,
+    dto: AssignRoleDto,
+  ): Promise<RoleEntity[]> {
+    const actorRoles = await this.roleRepository.findByUserId(actorId);
+    if (!RolePolicy.canManageRoles(actorRoles)) {
+      throw new ForbiddenException('Only an admin can assign roles');
+    }
+
     const user = await this.userRepository.findById(userId);
     if (!user) {
       throw new NotFoundException(`User with id "${userId}" not found`);

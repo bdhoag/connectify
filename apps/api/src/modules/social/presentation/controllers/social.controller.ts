@@ -1,5 +1,4 @@
 import {
-  Body,
   Controller,
   Delete,
   Get,
@@ -11,8 +10,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { PaginationQueryDto } from '../../../../common/dto/pagination-query.dto';
-import { BlockUserDto } from '../../application/dto/block-user.dto';
-import { FollowUserDto } from '../../application/dto/follow-user.dto';
+import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { BlockUserUseCase } from '../../application/use-cases/block-user.use-case';
 import { FindBlockedUsersUseCase } from '../../application/use-cases/find-blocked-users.use-case';
 import { FindFollowersUseCase } from '../../application/use-cases/find-followers.use-case';
@@ -33,21 +32,22 @@ export class SocialController {
     private readonly findBlockedUsersUseCase: FindBlockedUsersUseCase,
   ) {}
 
+  // `:userId` is the target of the action; the actor is always the caller.
   @Post('follow')
   follow(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Body() dto: FollowUserDto,
   ) {
-    return this.followUserUseCase.execute(userId, dto);
+    return this.followUserUseCase.execute(user.id, userId);
   }
 
   @Delete('follow')
   @HttpCode(HttpStatus.NO_CONTENT)
   unfollow(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Body() dto: FollowUserDto,
   ) {
-    return this.unfollowUserUseCase.execute(userId, dto);
+    return this.unfollowUserUseCase.execute(user.id, userId);
   }
 
   @Get('followers')
@@ -68,26 +68,27 @@ export class SocialController {
 
   @Post('block')
   block(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Body() dto: BlockUserDto,
   ) {
-    return this.blockUserUseCase.execute(userId, dto);
+    return this.blockUserUseCase.execute(user.id, userId);
   }
 
   @Delete('block')
   @HttpCode(HttpStatus.NO_CONTENT)
   unblock(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Body() dto: BlockUserDto,
   ) {
-    return this.unblockUserUseCase.execute(userId, dto);
+    return this.unblockUserUseCase.execute(user.id, userId);
   }
 
   @Get('blocked')
   findBlocked(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Query() query: PaginationQueryDto,
   ) {
-    return this.findBlockedUsersUseCase.execute(userId, query);
+    return this.findBlockedUsersUseCase.execute(user.id, userId, query);
   }
 }

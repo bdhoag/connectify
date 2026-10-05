@@ -11,6 +11,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { CreateUserDto } from '../../application/dto/create-user.dto';
 import { QueryUserDto } from '../../application/dto/query-user.dto';
 import { UpdateUserDto } from '../../application/dto/update-user.dto';
@@ -46,13 +48,20 @@ export class UsersController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
-    return this.updateUserUseCase.execute(id, dto);
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return this.updateUserUseCase.execute(user.id, id, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.deleteUserUseCase.execute(id);
+  remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.deleteUserUseCase.execute(user.id, id);
   }
 }

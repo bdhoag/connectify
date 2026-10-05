@@ -10,7 +10,10 @@ export class CreatePostUseCase {
     @Inject(POST_REPOSITORY) private readonly postRepository: PostRepository,
   ) {}
 
-  execute(dto: CreatePostDto): Promise<PostEntity> {
-    return this.postRepository.create(dto);
+  execute(userId: string, dto: CreatePostDto): Promise<PostEntity> {
+    return this.postRepository.create({
+      authorId: userId,
+      content: dto.content,
+    });
   }
 }

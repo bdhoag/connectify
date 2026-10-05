@@ -11,10 +11,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { PaginationQueryDto } from '../../../../common/dto/pagination-query.dto';
+import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { CursorPaginationQueryDto } from '../../../../common/dto/cursor-pagination-query.dto';
 import { AddMemberDto } from '../../application/dto/add-member.dto';
 import { CreateConversationDto } from '../../application/dto/create-conversation.dto';
-import { QueryConversationDto } from '../../application/dto/query-conversation.dto';
 import { SendMessageDto } from '../../application/dto/send-message.dto';
 import { UpdateMessageDto } from '../../application/dto/update-message.dto';
 import { AddMemberUseCase } from '../../application/use-cases/add-member.use-case';
@@ -44,69 +46,89 @@ export class MessagesController {
   ) {}
 
   @Post('conversations')
-  createConversation(@Body() dto: CreateConversationDto) {
-    return this.createConversationUseCase.execute(dto);
+  createConversation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateConversationDto,
+  ) {
+    return this.createConversationUseCase.execute(user.id, dto);
   }
 
   @Get('conversations')
-  findConversations(@Query() query: QueryConversationDto) {
-    return this.findConversationsForUserUseCase.execute(query);
+  findConversations(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.findConversationsForUserUseCase.execute(user.id, query);
   }
 
   @Get('conversations/:id')
-  findConversation(@Param('id', ParseUUIDPipe) id: string) {
-    return this.findConversationByIdUseCase.execute(id);
+  findConversation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.findConversationByIdUseCase.execute(user.id, id);
   }
 
   @Post('conversations/:id/members')
   addMember(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AddMemberDto,
   ) {
-    return this.addMemberUseCase.execute(id, dto);
+    return this.addMemberUseCase.execute(user.id, id, dto);
   }
 
   @Delete('conversations/:id/members/:userId')
   @HttpCode(HttpStatus.NO_CONTENT)
   removeMember(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('userId', ParseUUIDPipe) userId: string,
   ) {
-    return this.removeMemberUseCase.execute(id, userId);
+    return this.removeMemberUseCase.execute(user.id, id, userId);
   }
 
   @Post('conversations/:id/messages')
   sendMessage(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SendMessageDto,
   ) {
-    return this.sendMessageUseCase.execute(id, dto);
+    return this.sendMessageUseCase.execute(user.id, id, dto);
   }
 
   @Get('conversations/:id/messages')
   findMessages(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: CursorPaginationQueryDto,
   ) {
-    return this.findMessagesUseCase.execute(id, query);
+    return this.findMessagesUseCase.execute(user.id, id, query);
   }
 
   @Get('messages/:id')
-  findMessage(@Param('id', ParseUUIDPipe) id: string) {
-    return this.findMessageByIdUseCase.execute(id);
+  findMessage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.findMessageByIdUseCase.execute(user.id, id);
   }
 
   @Patch('messages/:id')
   updateMessage(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateMessageDto,
   ) {
-    return this.updateMessageUseCase.execute(id, dto);
+    return this.updateMessageUseCase.execute(user.id, id, dto);
   }
 
   @Delete('messages/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  deleteMessage(@Param('id', ParseUUIDPipe) id: string) {
-    return this.deleteMessageUseCase.execute(id);
+  deleteMessage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.deleteMessageUseCase.execute(user.id, id);
   }
 }

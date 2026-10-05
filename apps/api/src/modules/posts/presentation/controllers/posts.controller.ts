@@ -11,6 +11,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { CreatePostDto } from '../../application/dto/create-post.dto';
 import { QueryPostDto } from '../../application/dto/query-post.dto';
 import { UpdatePostDto } from '../../application/dto/update-post.dto';
@@ -31,8 +33,8 @@ export class PostsController {
   ) {}
 
   @Post()
-  create(@Body() dto: CreatePostDto) {
-    return this.createPostUseCase.execute(dto);
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePostDto) {
+    return this.createPostUseCase.execute(user.id, dto);
   }
 
   @Get()
@@ -46,13 +48,20 @@ export class PostsController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdatePostDto) {
-    return this.updatePostUseCase.execute(id, dto);
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePostDto,
+  ) {
+    return this.updatePostUseCase.execute(user.id, id, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.deletePostUseCase.execute(id);
+  remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.deletePostUseCase.execute(user.id, id);
   }
 }

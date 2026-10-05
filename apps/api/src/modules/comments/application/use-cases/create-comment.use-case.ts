@@ -14,7 +14,11 @@ export class CreateCommentUseCase {
     @Inject(POST_REPOSITORY) private readonly postRepository: PostRepository,
   ) {}
 
-  async execute(postId: string, dto: CreateCommentDto): Promise<CommentEntity> {
+  async execute(
+    userId: string,
+    postId: string,
+    dto: CreateCommentDto,
+  ): Promise<CommentEntity> {
     const post = await this.postRepository.findById(postId);
     if (!post) {
       throw new NotFoundException(`Post with id "${postId}" not found`);
@@ -22,7 +26,7 @@ export class CreateCommentUseCase {
 
     return this.commentRepository.create({
       postId,
-      authorId: dto.authorId,
+      authorId: userId,
       content: dto.content,
     });
   }

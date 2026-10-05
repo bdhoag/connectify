@@ -8,9 +8,8 @@ import {
   Req,
   Res,
   UnauthorizedException,
-  UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { LoginDto } from '../application/dto/login.dto';
 import { RegisterDto } from '../application/dto/register.dto';
@@ -21,7 +20,7 @@ import { LogoutUseCase } from '../application/use-cases/logout.use-case';
 import { RefreshTokenUseCase } from '../application/use-cases/refresh-token.use-case';
 import { RegisterUseCase } from '../application/use-cases/register.use-case';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { Public } from './decorators/public.decorator';
 import type { AuthenticatedUser } from './guards/jwt-auth.guard';
 
 const REFRESH_TOKEN_COOKIE = 'refresh_token';
@@ -40,12 +39,14 @@ export class AuthController {
     private readonly getCurrentUserUseCase: GetCurrentUserUseCase,
   ) {}
 
+  @Public()
   @Post('register')
   @ApiOperation({ summary: 'Register a new account' })
   register(@Body() dto: RegisterDto) {
     return this.registerUseCase.execute(dto);
   }
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log in with email and password' })
@@ -62,6 +63,7 @@ export class AuthController {
     return { user: result.user, accessToken: result.accessToken };
   }
 
+  @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -85,6 +87,7 @@ export class AuthController {
     return { accessToken: result.accessToken };
   }
 
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke the current refresh token' })
@@ -97,8 +100,6 @@ export class AuthController {
   }
 
   @Post('logout-all')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke every active session for the current user' })
   async logoutAll(
@@ -110,8 +111,6 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get the current authenticated user' })
   getCurrentUser(@CurrentUser() user: AuthenticatedUser) {
     return this.getCurrentUserUseCase.execute(user.id);

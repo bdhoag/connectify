@@ -11,6 +11,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { PaginationQueryDto } from '../../../../common/dto/pagination-query.dto';
 import { CreateCommentDto } from '../../application/dto/create-comment.dto';
 import { UpdateCommentDto } from '../../application/dto/update-comment.dto';
@@ -40,10 +42,11 @@ export class CommentsController {
 
   @Post('posts/:postId/comments')
   createTopLevel(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('postId', ParseUUIDPipe) postId: string,
     @Body() dto: CreateCommentDto,
   ) {
-    return this.createCommentUseCase.execute(postId, dto);
+    return this.createCommentUseCase.execute(user.id, postId, dto);
   }
 
   @Get('posts/:postId/comments')
@@ -61,10 +64,11 @@ export class CommentsController {
 
   @Post('comments/:id/replies')
   createReply(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateCommentDto,
   ) {
-    return this.createReplyUseCase.execute(id, dto);
+    return this.createReplyUseCase.execute(user.id, id, dto);
   }
 
   @Get('comments/:id/replies')
@@ -76,13 +80,20 @@ export class CommentsController {
   }
 
   @Patch('comments/:id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCommentDto) {
-    return this.updateCommentUseCase.execute(id, dto);
+  update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCommentDto,
+  ) {
+    return this.updateCommentUseCase.execute(user.id, id, dto);
   }
 
   @Delete('comments/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.deleteCommentUseCase.execute(id);
+  remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.deleteCommentUseCase.execute(user.id, id);
   }
 }

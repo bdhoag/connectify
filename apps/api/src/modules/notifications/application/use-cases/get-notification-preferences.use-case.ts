@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { UserPolicy } from '../../../users/domain/policies/user.policy';
 import { NotificationPreferencesEntity } from '../../domain/entities/notification-preferences.entity';
 import { NOTIFICATION_PREFERENCES_REPOSITORY } from '../../domain/repositories/notification-preferences.repository';
 import type { NotificationPreferencesRepository } from '../../domain/repositories/notification-preferences.repository';
@@ -17,7 +18,16 @@ export class GetNotificationPreferencesUseCase {
     private readonly preferencesRepository: NotificationPreferencesRepository,
   ) {}
 
-  async execute(userId: string): Promise<NotificationPreferencesEntity> {
+  async execute(
+    actorId: string,
+    userId: string,
+  ): Promise<NotificationPreferencesEntity> {
+    if (!UserPolicy.canManage(actorId, userId)) {
+      throw new ForbiddenException(
+        'You can only view your own notification preferences',
+      );
+    }
+
     const existing = await this.preferencesRepository.findByUserId(userId);
     if (existing) {
       return existing;

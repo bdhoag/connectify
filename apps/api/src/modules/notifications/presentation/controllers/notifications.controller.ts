@@ -10,6 +10,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { CreateNotificationDto } from '../../application/dto/create-notification.dto';
 import { QueryNotificationDto } from '../../application/dto/query-notification.dto';
 import { UpdateNotificationPreferencesDto } from '../../application/dto/update-notification-preferences.dto';
@@ -34,41 +36,64 @@ export class NotificationsController {
   ) {}
 
   @Post('notifications')
-  create(@Body() dto: CreateNotificationDto) {
-    return this.createNotificationUseCase.execute(dto);
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateNotificationDto,
+  ) {
+    return this.createNotificationUseCase.execute(user.id, dto);
   }
 
   @Get('notifications')
-  findMany(@Query() query: QueryNotificationDto) {
-    return this.findNotificationsUseCase.execute(query);
+  findMany(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: QueryNotificationDto,
+  ) {
+    return this.findNotificationsUseCase.execute(user.id, query);
   }
 
   @Get('notifications/:id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.findNotificationByIdUseCase.execute(id);
+  findOne(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.findNotificationByIdUseCase.execute(user.id, id);
   }
 
   @Patch('notifications/:id/read')
-  markRead(@Param('id', ParseUUIDPipe) id: string) {
-    return this.markNotificationReadUseCase.execute(id);
+  markRead(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.markNotificationReadUseCase.execute(user.id, id);
   }
 
   @Post('users/:userId/notifications/read-all')
   @HttpCode(HttpStatus.NO_CONTENT)
-  markAllRead(@Param('userId', ParseUUIDPipe) userId: string) {
-    return this.markAllNotificationsReadUseCase.execute(userId);
+  markAllRead(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.markAllNotificationsReadUseCase.execute(user.id, userId);
   }
 
   @Get('users/:userId/notification-preferences')
-  getPreferences(@Param('userId', ParseUUIDPipe) userId: string) {
-    return this.getNotificationPreferencesUseCase.execute(userId);
+  getPreferences(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.getNotificationPreferencesUseCase.execute(user.id, userId);
   }
 
   @Patch('users/:userId/notification-preferences')
   updatePreferences(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: UpdateNotificationPreferencesDto,
   ) {
-    return this.updateNotificationPreferencesUseCase.execute(userId, dto);
+    return this.updateNotificationPreferencesUseCase.execute(
+      user.id,
+      userId,
+      dto,
+    );
   }
 }
