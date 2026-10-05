@@ -27,6 +27,9 @@ async function bootstrap() {
     .setDescription('API documentation for Connectify application')
     .setVersion('1.0')
     .addBearerAuth()
+    // Every route is authenticated by default (global JwtAuthGuard), so make
+    // Swagger send the Bearer token on all of them instead of per-controller.
+    .addSecurityRequirements('bearer')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

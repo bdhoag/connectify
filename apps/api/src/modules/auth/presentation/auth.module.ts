@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { UsersModule } from '../../users/users.module';
 import { GetCurrentUserUseCase } from '../application/use-cases/get-current-user.use-case';
@@ -42,6 +43,8 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
     TokenService,
     JwtAuthGuard,
+    // Authenticate every route by default; opt out with @Public().
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
     RegisterUseCase,
     LoginUseCase,
     RefreshTokenUseCase,
@@ -49,8 +52,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
     LogoutAllUseCase,
     GetCurrentUserUseCase,
   ],
-  // Exported so other modules (posts, comments, ...) can protect their own
-  // routes with the same guard/token verification once they add auth checks.
+  // Exported for modules that need to verify tokens themselves.
   exports: [JwtAuthGuard, TokenService],
 })
 export class AuthModule {}
