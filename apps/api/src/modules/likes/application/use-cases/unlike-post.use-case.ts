@@ -1,7 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { LIKE_REPOSITORY } from '../../domain/repositories/like.repository';
 import type { LikeRepository } from '../../domain/repositories/like.repository';
-import { LikePostDto } from '../dto/like-post.dto';
 
 @Injectable()
 export class UnlikePostUseCase {
@@ -9,12 +8,10 @@ export class UnlikePostUseCase {
     @Inject(LIKE_REPOSITORY) private readonly likeRepository: LikeRepository,
   ) {}
 
-  async execute(postId: string, dto: LikePostDto): Promise<void> {
-    const deleted = await this.likeRepository.delete(dto.userId, postId);
+  async execute(userId: string, postId: string): Promise<void> {
+    const deleted = await this.likeRepository.delete(userId, postId);
     if (!deleted) {
-      throw new NotFoundException(
-        `Post "${postId}" is not liked by user "${dto.userId}"`,
-      );
+      throw new NotFoundException(`Post "${postId}" is not liked by you`);
     }
   }
 }

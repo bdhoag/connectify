@@ -12,6 +12,7 @@ export class CreateReplyUseCase {
   ) {}
 
   async execute(
+    userId: string,
     parentId: string,
     dto: CreateCommentDto,
   ): Promise<CommentEntity> {
@@ -23,7 +24,7 @@ export class CreateReplyUseCase {
     return this.commentRepository.create({
       postId: parent.postId,
       parentId: parent.id,
-      authorId: dto.authorId,
+      authorId: userId,
       content: dto.content,
     });
   }
