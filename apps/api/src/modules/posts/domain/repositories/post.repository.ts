@@ -1,10 +1,12 @@
+import { NewMediaAttachment } from '../../../media/domain/entities/media-attachment.entity';
 import { PostEntity } from '../entities/post.entity';
 
 export const POST_REPOSITORY = Symbol('POST_REPOSITORY');
 
 export interface CreatePostData {
   authorId: string;
-  content: string;
+  content: string | null;
+  media: NewMediaAttachment[];
 }
 
 export interface UpdatePostData {

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MediaModule } from '../media/media.module';
 import { CreatePostUseCase } from './application/use-cases/create-post.use-case';
 import { DeletePostUseCase } from './application/use-cases/delete-post.use-case';
 import { FindPostByIdUseCase } from './application/use-cases/find-post-by-id.use-case';
@@ -9,6 +10,7 @@ import { DrizzlePostRepository } from './infrastructure/repositories/drizzle-pos
 import { PostsController } from './presentation/controllers/posts.controller';
 
 @Module({
+  imports: [MediaModule],
   controllers: [PostsController],
   providers: [
     { provide: POST_REPOSITORY, useClass: DrizzlePostRepository },

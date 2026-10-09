@@ -1,5 +1,12 @@
 import { relations } from 'drizzle-orm';
-import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { mediaTypeEnum } from './enums.schema';
 import { users } from './users.schema';
 import { comments } from './comments.schema';
@@ -14,7 +21,9 @@ export const posts = pgTable(
     authorId: uuid('author_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
-    content: text('content').notNull(),
+    // Nullable: a post may be media only. At least one of content or media
+    // is enforced in CreatePostUseCase.
+    content: text('content'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -47,7 +56,11 @@ export const postMedia = pgTable(
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     mediaUrl: text('media_url').notNull(),
+    // Cloudinary public_id: needed to delete the asset later.
+    publicId: text('public_id').notNull(),
     mediaType: mediaTypeEnum('media_type').notNull(),
+    // Display order within the parent (0-based).
+    position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

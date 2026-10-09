@@ -8,6 +8,20 @@
       "when": 1789544563763,
       "tag": "0000_workable_zaladane",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791544439968,
+      "tag": "0001_lovely_smasher",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791572010018,
+      "tag": "0002_fluffy_dragon_man",
+      "breakpoints": true
     }
   ]
 }
