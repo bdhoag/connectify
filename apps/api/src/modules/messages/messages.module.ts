@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MediaModule } from '../media/media.module';
 import { AddMemberUseCase } from './application/use-cases/add-member.use-case';
 import { ConversationAuthorizer } from './application/services/conversation-authorizer';
 import { CreateConversationUseCase } from './application/use-cases/create-conversation.use-case';
@@ -17,6 +18,7 @@ import { DrizzleMessageRepository } from './infrastructure/repositories/drizzle-
 import { MessagesController } from './presentation/controllers/messages.controller';
 
 @Module({
+  imports: [MediaModule],
   controllers: [MessagesController],
   providers: [
     {

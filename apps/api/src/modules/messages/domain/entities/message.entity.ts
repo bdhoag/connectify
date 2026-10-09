@@ -1,8 +1,11 @@
+import { MediaAttachment } from '../../../media/domain/entities/media-attachment.entity';
+
 export class MessageEntity {
   id: string;
   conversationId: string;
   senderId: string;
   content: string | null;
+  media: MediaAttachment[];
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -12,6 +15,7 @@ export class MessageEntity {
     conversationId: string;
     senderId: string;
     content: string | null;
+    media: MediaAttachment[];
     createdAt: Date;
     updatedAt: Date;
     deletedAt: Date | null;
@@ -20,6 +24,7 @@ export class MessageEntity {
     this.conversationId = props.conversationId;
     this.senderId = props.senderId;
     this.content = props.content;
+    this.media = props.media;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
     this.deletedAt = props.deletedAt;

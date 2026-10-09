@@ -7,6 +7,9 @@ import {
   ConversationEntity,
   ConversationMemberEntity,
 } from '../../domain/entities/conversation.entity';
+import { MediaAssetCleaner } from '../../../media/application/services/media-asset-cleaner';
+import { MediaAttachmentValidator } from '../../../media/application/services/media-attachment-validator';
+import type { MediaStorage } from '../../../media/domain/services/media-storage';
 import { MessageEntity } from '../../domain/entities/message.entity';
 import { ConversationAuthorizer } from '../services/conversation-authorizer';
 import { AddMemberUseCase } from './add-member.use-case';
@@ -55,10 +58,27 @@ const message = new MessageEntity({
   conversationId: 'conv-1',
   senderId: ALICE,
   content: 'secret',
+  media: [],
   createdAt: now,
   updatedAt: now,
   deletedAt: null,
 });
+
+function makeValidator(owned = true) {
+  const storage: MediaStorage = {
+    signUpload: jest.fn(),
+    isOwnedUpload: jest.fn().mockReturnValue(owned),
+    deleteMany: jest.fn(),
+  };
+  return new MediaAttachmentValidator(storage);
+}
+
+function makeCleaner() {
+  return { deleteAssets: jest.fn().mockResolvedValue(undefined) };
+}
+
+const asCleaner = (c: ReturnType<typeof makeCleaner>) =>
+  c as unknown as MediaAssetCleaner;
 
 function setup(options: { conversationExists?: boolean } = {}) {
   const conversationRepo = {
@@ -163,22 +183,89 @@ describe('FindMessagesUseCase', () => {
 describe('SendMessageUseCase', () => {
   it('uses the authenticated user as the sender', async () => {
     const { authorizer, messageRepo } = setup();
-    await new SendMessageUseCase(messageRepo, authorizer).execute(
-      BOB,
-      'conv-1',
-      { content: 'hi' },
-    );
+    await new SendMessageUseCase(
+      messageRepo,
+      authorizer,
+      makeValidator(),
+    ).execute(BOB, 'conv-1', { content: 'hi' });
     expect(messageRepo.create).toHaveBeenCalledWith({
       conversationId: 'conv-1',
       senderId: BOB,
       content: 'hi',
+      media: [],
     });
+  });
+
+  it('allows an images-only message', async () => {
+    const { authorizer, messageRepo } = setup();
+    const media = [
+      { url: 'https://res.cloudinary.com/x.jpg', publicId: 'a/b' },
+    ];
+    await new SendMessageUseCase(
+      messageRepo,
+      authorizer,
+      makeValidator(),
+    ).execute(BOB, 'conv-1', { media });
+    expect(messageRepo.create).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      senderId: BOB,
+      content: null,
+      media,
+    });
+  });
+
+  it.each([
+    ['nothing', {}],
+    ['an empty media list', { media: [] }],
+    ['whitespace-only text', { content: '   ' }],
+  ])('rejects a message with %s', async (_label, dto) => {
+    const { authorizer, messageRepo } = setup();
+    await expect(
+      new SendMessageUseCase(messageRepo, authorizer, makeValidator()).execute(
+        BOB,
+        'conv-1',
+        dto,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(messageRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('treats whitespace-only text as no text when media is attached', async () => {
+    const { authorizer, messageRepo } = setup();
+    const media = [
+      { url: 'https://res.cloudinary.com/x.jpg', publicId: 'a/b' },
+    ];
+    await new SendMessageUseCase(
+      messageRepo,
+      authorizer,
+      makeValidator(),
+    ).execute(BOB, 'conv-1', { content: '   ', media });
+    expect(messageRepo.create).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      senderId: BOB,
+      content: null,
+      media,
+    });
+  });
+
+  it('rejects media the user did not upload', async () => {
+    const { authorizer, messageRepo } = setup();
+    await expect(
+      new SendMessageUseCase(
+        messageRepo,
+        authorizer,
+        makeValidator(false),
+      ).execute(BOB, 'conv-1', {
+        media: [{ url: 'https://res.cloudinary.com/x.jpg', publicId: 'a/b' }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(messageRepo.create).not.toHaveBeenCalled();
   });
 
   it('denies a non-participant', async () => {
     const { authorizer, messageRepo } = setup();
     await expect(
-      new SendMessageUseCase(messageRepo, authorizer).execute(
+      new SendMessageUseCase(messageRepo, authorizer, makeValidator()).execute(
         MALLORY,
         'conv-1',
         { content: 'hi' },
@@ -226,12 +313,30 @@ describe('UpdateMessageUseCase / DeleteMessageUseCase', () => {
       'msg-1',
       { content: 'edited' },
     );
-    await new DeleteMessageUseCase(messageRepo, authorizer).execute(
-      ALICE,
-      'msg-1',
-    );
+    await new DeleteMessageUseCase(
+      messageRepo,
+      authorizer,
+      asCleaner(makeCleaner()),
+    ).execute(ALICE, 'msg-1');
     expect(messageRepo.update).toHaveBeenCalled();
     expect(messageRepo.softDelete).toHaveBeenCalled();
+  });
+
+  it('deletes the message’s media from the provider after soft-deleting it', async () => {
+    const { authorizer, messageRepo } = setup();
+    const media = [
+      { id: 'm1', url: 'https://x/1.jpg', publicId: 'p/1', type: 'IMAGE' },
+    ] as const;
+    messageRepo.softDelete.mockResolvedValue(
+      new MessageEntity({ ...message, media: [...media] }),
+    );
+    const cleaner = makeCleaner();
+    await new DeleteMessageUseCase(
+      messageRepo,
+      authorizer,
+      asCleaner(cleaner),
+    ).execute(ALICE, 'msg-1');
+    expect(cleaner.deleteAssets).toHaveBeenCalledWith(media);
   });
 
   it("forbids a participant from editing or deleting someone else's message", async () => {
@@ -242,7 +347,11 @@ describe('UpdateMessageUseCase / DeleteMessageUseCase', () => {
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      new DeleteMessageUseCase(messageRepo, authorizer).execute(BOB, 'msg-1'),
+      new DeleteMessageUseCase(
+        messageRepo,
+        authorizer,
+        asCleaner(makeCleaner()),
+      ).execute(BOB, 'msg-1'),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(messageRepo.update).not.toHaveBeenCalled();
     expect(messageRepo.softDelete).not.toHaveBeenCalled();
@@ -258,10 +367,11 @@ describe('UpdateMessageUseCase / DeleteMessageUseCase', () => {
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      new DeleteMessageUseCase(messageRepo, authorizer).execute(
-        MALLORY,
-        'msg-1',
-      ),
+      new DeleteMessageUseCase(
+        messageRepo,
+        authorizer,
+        asCleaner(makeCleaner()),
+      ).execute(MALLORY, 'msg-1'),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
