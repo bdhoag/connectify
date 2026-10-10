@@ -1,5 +1,12 @@
 import { relations } from 'drizzle-orm';
-import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { mediaTypeEnum } from './enums.schema';
 import { users } from './users.schema';
@@ -64,7 +71,11 @@ export const commentMedia = pgTable(
       .notNull()
       .references(() => comments.id, { onDelete: 'cascade' }),
     mediaUrl: text('media_url').notNull(),
+    // Cloudinary public_id: needed to delete the asset later.
+    publicId: text('public_id').notNull(),
     mediaType: mediaTypeEnum('media_type').notNull(),
+    // Display order within the parent (0-based).
+    position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -12,6 +12,7 @@ import { LikesModule } from './modules/likes/likes.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { SocialModule } from './modules/social/social.module';
+import { MediaModule } from './modules/media/media.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     LikesModule,
     MessagesModule,
     NotificationsModule,
+    MediaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

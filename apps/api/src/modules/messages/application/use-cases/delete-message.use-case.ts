@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { MediaAssetCleaner } from '../../../media/application/services/media-asset-cleaner';
 import { MessagePolicy } from '../../domain/policies/message.policy';
 import { MESSAGE_REPOSITORY } from '../../domain/repositories/message.repository';
 import type { MessageRepository } from '../../domain/repositories/message.repository';
@@ -15,6 +16,7 @@ export class DeleteMessageUseCase {
     @Inject(MESSAGE_REPOSITORY)
     private readonly messageRepository: MessageRepository,
     private readonly conversationAuthorizer: ConversationAuthorizer,
+    private readonly mediaCleaner: MediaAssetCleaner,
   ) {}
 
   async execute(userId: string, id: string): Promise<void> {
@@ -35,5 +37,8 @@ export class DeleteMessageUseCase {
     if (!deleted) {
       throw new NotFoundException(`Message with id "${id}" not found`);
     }
+
+    // Only after the message is gone from the database.
+    await this.mediaCleaner.deleteAssets(deleted.media);
   }
 }

@@ -1,6 +1,7 @@
 import { relations } from 'drizzle-orm';
 import {
   index,
+  integer,
   pgTable,
   primaryKey,
   text,
@@ -116,7 +117,11 @@ export const messageMedia = pgTable(
       .notNull()
       .references(() => messages.id, { onDelete: 'cascade' }),
     mediaUrl: text('media_url').notNull(),
+    // Cloudinary public_id: needed to delete the asset later.
+    publicId: text('public_id').notNull(),
     mediaType: mediaTypeEnum('media_type').notNull(),
+    // Display order within the parent (0-based).
+    position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

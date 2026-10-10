@@ -1,3 +1,4 @@
+import { NewMediaAttachment } from '../../../media/domain/entities/media-attachment.entity';
 import { MessageEntity } from '../entities/message.entity';
 
 export const MESSAGE_REPOSITORY = Symbol('MESSAGE_REPOSITORY');
@@ -5,7 +6,8 @@ export const MESSAGE_REPOSITORY = Symbol('MESSAGE_REPOSITORY');
 export interface CreateMessageData {
   conversationId: string;
   senderId: string;
-  content: string;
+  content: string | null;
+  media: NewMediaAttachment[];
 }
 
 export interface UpdateMessageData {

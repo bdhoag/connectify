@@ -5,6 +5,7 @@ const post = new PostEntity({
   id: 'post-1',
   authorId: 'author',
   content: 'hello',
+  media: [],
   createdAt: new Date(),
   updatedAt: new Date(),
   deletedAt: null,
