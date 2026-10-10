@@ -21,7 +21,10 @@ export interface FindFollowsResult {
 export interface FollowRepository {
   // Throws a domain-friendly conflict error on a duplicate (followerId, followingId) pair.
   create(data: CreateFollowData): Promise<FollowEntity>;
-  findOne(followerId: string, followingId: string): Promise<FollowEntity | null>;
+  findOne(
+    followerId: string,
+    followingId: string,
+  ): Promise<FollowEntity | null>;
   delete(followerId: string, followingId: string): Promise<boolean>;
   findFollowers(params: FindFollowsParams): Promise<FindFollowsResult>;
   findFollowing(params: FindFollowsParams): Promise<FindFollowsResult>;

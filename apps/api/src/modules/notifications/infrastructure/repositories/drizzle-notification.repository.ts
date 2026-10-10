@@ -71,7 +71,9 @@ export class DrizzleNotificationRepository implements NotificationRepository {
     await this.db
       .update(notifications)
       .set({ readAt: new Date() })
-      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+      .where(
+        and(eq(notifications.userId, userId), isNull(notifications.readAt)),
+      );
   }
 
   private toEntity(row: NotificationRow): NotificationEntity {

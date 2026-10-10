@@ -15,7 +15,10 @@ import { NotificationsController } from './presentation/controllers/notification
 @Module({
   controllers: [NotificationsController],
   providers: [
-    { provide: NOTIFICATION_REPOSITORY, useClass: DrizzleNotificationRepository },
+    {
+      provide: NOTIFICATION_REPOSITORY,
+      useClass: DrizzleNotificationRepository,
+    },
     {
       provide: NOTIFICATION_PREFERENCES_REPOSITORY,
       useClass: DrizzleNotificationPreferencesRepository,

@@ -36,7 +36,10 @@ export class DrizzleBlockRepository implements BlockRepository {
     blockedId: string,
   ): Promise<BlockEntity | null> {
     const row = await this.db.query.blocks.findFirst({
-      where: and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)),
+      where: and(
+        eq(blocks.blockerId, blockerId),
+        eq(blocks.blockedId, blockedId),
+      ),
     });
     return row ? this.toEntity(row) : null;
   }
@@ -44,7 +47,9 @@ export class DrizzleBlockRepository implements BlockRepository {
   async delete(blockerId: string, blockedId: string): Promise<boolean> {
     const rows = await this.db
       .delete(blocks)
-      .where(and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)))
+      .where(
+        and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)),
+      )
       .returning();
     return rows.length > 0;
   }

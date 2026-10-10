@@ -12,9 +12,7 @@ import {
 type PreferencesRow = typeof notificationPreferences.$inferSelect;
 
 @Injectable()
-export class DrizzleNotificationPreferencesRepository
-  implements NotificationPreferencesRepository
-{
+export class DrizzleNotificationPreferencesRepository implements NotificationPreferencesRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
 
   async findByUserId(

@@ -2,7 +2,10 @@ import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { and, count, eq, isNull } from 'drizzle-orm';
 import { DRIZZLE } from '../../../../database/database.provider';
 import type { DrizzleDb } from '../../../../database/database.provider';
-import { conversationMembers, conversations } from '../../../../database/schema';
+import {
+  conversationMembers,
+  conversations,
+} from '../../../../database/schema';
 import {
   ConversationEntity,
   ConversationMemberEntity,
@@ -25,7 +28,9 @@ export class DrizzleConversationRepository implements ConversationRepository {
       const [row] = await tx.insert(conversations).values({}).returning();
       await tx
         .insert(conversationMembers)
-        .values(memberIds.map((userId) => ({ conversationId: row.id, userId })));
+        .values(
+          memberIds.map((userId) => ({ conversationId: row.id, userId })),
+        );
       return this.toEntity(row);
     });
   }
@@ -53,10 +58,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
         orderBy: (m, { desc: orderDesc }) => [orderDesc(m.joinedAt)],
         with: { conversation: true },
       }),
-      this.db
-        .select({ value: count() })
-        .from(conversationMembers)
-        .where(where),
+      this.db.select({ value: count() }).from(conversationMembers).where(where),
     ]);
 
     return {
@@ -65,14 +67,19 @@ export class DrizzleConversationRepository implements ConversationRepository {
     };
   }
 
-  async findMembers(conversationId: string): Promise<ConversationMemberEntity[]> {
+  async findMembers(
+    conversationId: string,
+  ): Promise<ConversationMemberEntity[]> {
     const rows = await this.db.query.conversationMembers.findMany({
       where: eq(conversationMembers.conversationId, conversationId),
     });
     return rows.map((row) => this.toMemberEntity(row));
   }
 
-  async isActiveMember(conversationId: string, userId: string): Promise<boolean> {
+  async isActiveMember(
+    conversationId: string,
+    userId: string,
+  ): Promise<boolean> {
     const row = await this.db.query.conversationMembers.findFirst({
       where: and(
         eq(conversationMembers.conversationId, conversationId),

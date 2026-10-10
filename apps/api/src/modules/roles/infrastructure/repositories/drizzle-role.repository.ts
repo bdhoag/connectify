@@ -48,6 +48,10 @@ export class DrizzleRoleRepository implements RoleRepository {
   }
 
   private toEntity(row: RoleRow): RoleEntity {
-    return new RoleEntity({ id: row.id, name: row.name, createdAt: row.createdAt });
+    return new RoleEntity({
+      id: row.id,
+      name: row.name,
+      createdAt: row.createdAt,
+    });
   }
 }
