@@ -10,7 +10,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import { LoginDto } from '../application/dto/login.dto';
 import { RegisterDto } from '../application/dto/register.dto';
 import { GetCurrentUserUseCase } from '../application/use-cases/get-current-user.use-case';
@@ -23,11 +23,21 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import type { AuthenticatedUser } from './guards/jwt-auth.guard';
 
+const ACCESS_TOKEN_COOKIE = 'access_token';
 const REFRESH_TOKEN_COOKIE = 'refresh_token';
-// Scoped to /auth so the cookie is never sent to unrelated routes.
-const REFRESH_TOKEN_COOKIE_PATH = '/auth';
 
-@ApiTags('auth')
+// Both cookies are scoped to the whole site: the web app's proxy reads them on
+// page navigations to protect routes and silently refresh an expired session.
+function authCookieOptions(): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+  };
+}
+
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -55,11 +65,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.loginUseCase.execute(dto);
-    this.setRefreshTokenCookie(
-      res,
-      result.refreshToken,
-      result.refreshTokenExpiresAt,
-    );
+    this.setAuthCookies(res, result);
     return { user: result.user, accessToken: result.accessToken };
   }
 
@@ -67,7 +73,7 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Rotate the refresh token cookie and issue a new access token',
+    summary: 'Rotate the refresh token and issue a new access token',
   })
   async refresh(
     @Req() req: Request,
@@ -79,11 +85,7 @@ export class AuthController {
     }
 
     const result = await this.refreshTokenUseCase.execute(rawRefreshToken);
-    this.setRefreshTokenCookie(
-      res,
-      result.refreshToken,
-      result.refreshTokenExpiresAt,
-    );
+    this.setAuthCookies(res, result);
     return { accessToken: result.accessToken };
   }
 
@@ -96,7 +98,7 @@ export class AuthController {
     if (rawRefreshToken) {
       await this.logoutUseCase.execute(rawRefreshToken);
     }
-    this.clearRefreshTokenCookie(res);
+    this.clearAuthCookies(res);
   }
 
   @Post('logout-all')
@@ -107,7 +109,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     await this.logoutAllUseCase.execute(user.id);
-    this.clearRefreshTokenCookie(res);
+    this.clearAuthCookies(res);
   }
 
   @Get('me')
@@ -116,22 +118,28 @@ export class AuthController {
     return this.getCurrentUserUseCase.execute(user.id);
   }
 
-  private setRefreshTokenCookie(
+  private setAuthCookies(
     res: Response,
-    token: string,
-    expiresAt: Date,
+    tokens: {
+      accessToken: string;
+      accessTokenExpiresAt: Date;
+      refreshToken: string;
+      refreshTokenExpiresAt: Date;
+    },
   ): void {
-    res.cookie(REFRESH_TOKEN_COOKIE, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: REFRESH_TOKEN_COOKIE_PATH,
-      expires: expiresAt,
+    res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, {
+      ...authCookieOptions(),
+      expires: tokens.accessTokenExpiresAt,
+    });
+    res.cookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken, {
+      ...authCookieOptions(),
+      expires: tokens.refreshTokenExpiresAt,
     });
   }
 
-  private clearRefreshTokenCookie(res: Response): void {
-    res.clearCookie(REFRESH_TOKEN_COOKIE, { path: REFRESH_TOKEN_COOKIE_PATH });
+  private clearAuthCookies(res: Response): void {
+    res.clearCookie(ACCESS_TOKEN_COOKIE, authCookieOptions());
+    res.clearCookie(REFRESH_TOKEN_COOKIE, authCookieOptions());
   }
 
   private readRefreshTokenCookie(req: Request): string | undefined {

@@ -38,6 +38,13 @@ export class TokenService {
     return createHash('sha256').update(rawToken).digest('hex');
   }
 
+  getAccessTokenExpiresAt(): Date {
+    const expiresIn = this.configService.getOrThrow<string>(
+      'JWT_ACCESS_EXPIRES_IN',
+    );
+    return new Date(Date.now() + this.parseDurationMs(expiresIn));
+  }
+
   getRefreshTokenExpiresAt(): Date {
     const expiresIn = this.configService.getOrThrow<string>(
       'JWT_REFRESH_EXPIRES_IN',

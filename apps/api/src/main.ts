@@ -9,6 +9,10 @@ import { TransformResponseInterceptor } from './common/interceptors/transform-re
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // The web app proxies /api/* to this server, so the browser only ever talks
+  // to one origin (no CORS) and the auth cookies stay first-party.
+  app.setGlobalPrefix('api');
+
   app.use(cookieParser());
 
   app.useGlobalPipes(
@@ -36,7 +40,7 @@ async function bootstrap() {
 
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 4000);
 }
 
 bootstrap();
