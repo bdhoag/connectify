@@ -6,6 +6,7 @@ import { TokenService } from '../../infrastructure/security/token.service';
 export interface RefreshResult {
   userId: string;
   accessToken: string;
+  accessTokenExpiresAt: Date;
   refreshToken: string;
   refreshTokenExpiresAt: Date;
 }
@@ -42,6 +43,7 @@ export class RefreshTokenUseCase {
     await this.authRepository.revokeRefreshToken(record.id);
 
     const accessToken = this.tokenService.signAccessToken(record.userId);
+    const accessTokenExpiresAt = this.tokenService.getAccessTokenExpiresAt();
     const refreshToken = this.tokenService.generateRefreshToken();
     const refreshTokenExpiresAt = this.tokenService.getRefreshTokenExpiresAt();
 
@@ -54,6 +56,7 @@ export class RefreshTokenUseCase {
     return {
       userId: record.userId,
       accessToken,
+      accessTokenExpiresAt,
       refreshToken,
       refreshTokenExpiresAt,
     };

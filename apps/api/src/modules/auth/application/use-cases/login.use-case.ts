@@ -18,6 +18,7 @@ import { LoginDto } from '../dto/login.dto';
 export interface LoginResult {
   user: UserEntity;
   accessToken: string;
+  accessTokenExpiresAt: Date;
   refreshToken: string;
   refreshTokenExpiresAt: Date;
 }
@@ -56,6 +57,7 @@ export class LoginUseCase {
     }
 
     const accessToken = this.tokenService.signAccessToken(found.user.id);
+    const accessTokenExpiresAt = this.tokenService.getAccessTokenExpiresAt();
     const refreshToken = this.tokenService.generateRefreshToken();
     const refreshTokenExpiresAt = this.tokenService.getRefreshTokenExpiresAt();
 
@@ -68,6 +70,7 @@ export class LoginUseCase {
     return {
       user: found.user,
       accessToken,
+      accessTokenExpiresAt,
       refreshToken,
       refreshTokenExpiresAt,
     };

@@ -13,6 +13,8 @@ export interface AuthenticatedUser {
   id: string;
 }
 
+const ACCESS_TOKEN_COOKIE = 'access_token';
+
 type RequestWithUser = Request & { user: AuthenticatedUser };
 
 @Injectable()
@@ -47,11 +49,16 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 
+  // Bearer header first (Swagger, non-browser clients), then the httpOnly
+  // cookie the web app relies on.
   private extractToken(request: Request): string | undefined {
     const header = request.headers.authorization;
-    if (!header?.startsWith('Bearer ')) {
-      return undefined;
+    if (header?.startsWith('Bearer ')) {
+      return header.slice('Bearer '.length);
     }
-    return header.slice('Bearer '.length);
+    const cookies = request.cookies as
+      | Record<string, string | undefined>
+      | undefined;
+    return cookies?.[ACCESS_TOKEN_COOKIE];
   }
 }

@@ -1,4 +1,4 @@
-# AGENTS.md
+# [AGENTS.md](http://AGENTS.md)
 
 ## Project Overview
 
@@ -111,7 +111,7 @@ src/
 │       │
 │       ├── domain/
 │       │   ├── entities/
-│       │   ├── repositories/
+│       │   ├2── repositories/
 │       │   └── errors/
 │       │
 │       ├── infrastructure/
@@ -761,12 +761,14 @@ The web app lives in `apps/web`. Shared UI primitives live in `packages/ui`.
 - **next-themes** for light/dark mode (`.dark` class on `<html>`)
 - **Geist** (sans) and **Geist Mono** via `next/font/google`, already wired in `apps/web/app/layout.tsx`
 - **zod** for client-side schemas
+- **TanStack Query v5** (`@tanstack/react-query`) for server state
+- **Zustand v5** for shared client UI state
 
-Do not add another component library, CSS-in-JS solution, icon set or font.
+Do not add another component library, CSS-in-JS solution, icon set, font, data-fetching library (SWR, RTK Query, Apollo) or state library (Redux, Jotai, MobX, Recoil).
 
 ## Design reference
 
-The approved UI design is the **Connectify** canvas: https://claude.ai/artifact/WY8veqMfwQyN7jF6cgCBRT
+The approved UI design is the **Connectify** canvas: [https://claude.ai/artifact/WY8veqMfwQyN7jF6cgCBRT](https://claude.ai/artifact/WY8veqMfwQyN7jF6cgCBRT)
 
 It contains Home, Profile, Messages (light + dark), Notifications, Search, mobile Feed/Inbox/Chat, Login/Register/Forgot/Reset and a **Design system** board (tokens, components, states).
 
@@ -798,9 +800,11 @@ apps/web/
 ├── features/
 │   └── <feature>/             # posts, comments, profile, messages, notifications, search, auth
 │       ├── components/        # feature UI (PostCard, Composer, MessageBubble, …)
-│       ├── api/               # request functions + query hooks for this feature
+│       ├── api/               # request functions, query keys, queryOptions, query/mutation hooks
 │       ├── schemas/           # zod schemas / types for this feature
-│       └── hooks/             # feature-specific client logic
+│       ├── hooks/             # feature-specific client logic
+│       └── store.ts           # Zustand store, only if this feature has shared UI state
+├── stores/                    # app-wide Zustand stores (ui-store, realtime-store)
 └── lib/                       # api client, query client, socket client, env, formatters
 ```
 
@@ -823,12 +827,195 @@ Rules:
 
 ## Data, state and the API
 
-- All HTTP calls go through one API client in `apps/web/lib/api-client.ts` (base URL from env, credentials, JSON, error normalization). Components never call `fetch` with raw URLs.
-- The client converts the API error shape (`{ success: false, error: { code, message } }`) into a typed `ApiError` with `status`, `code` and `message`. UI branches on `code`, never on message text.
-- Server state on the client uses **TanStack Query** (add it when the first interactive data feature lands). Query keys live next to their feature in `features/<feature>/api`, e.g. `postKeys.feed()`, `postKeys.detail(id)`.
-- Do not mirror server data into `useState` or a global store. Local UI state (open dialogs, drafts, selected tab) stays in the component; URL-worthy state (search query, active tab, conversation id) lives in the URL.
-- Match backend pagination: **cursor-based infinite queries** for feed, comments, messages and notifications; page-based for simple lists.
+### API client
+
+- All HTTP calls go through one API client in `apps/web/lib/api-client.ts` (credentials, JSON, envelope unwrapping, error normalization). Components never call `fetch` with raw URLs.
+  - Browser code uses `apiRequest(path)`, which calls the same-origin `/api/*` path. `next.config.ts` rewrites it to `API_URL` (server-only env, default `http://localhost:4000`). Web runs on port 3000, the API on 4000 with the global prefix `/api`.
+  - Server Components use `serverApiRequest(path)` from `apps/web/lib/api-server.ts` (`server-only`), which calls `API_URL` directly and forwards the request cookies.
+- The API wraps successes as `{ success: true, statusCode, data, timestamp }` (204 has no body); the client returns `data`. Errors arrive as `{ success: false, statusCode, message: string | string[], error, timestamp, path }`. The client converts them into a typed `ApiError` with `status`, `code` (the `error` name in SCREAMING_SNAKE, e.g. `BAD_REQUEST`, `CONFLICT`) and `message`. Validation message arrays go to `details`; use `fieldErrorsFrom()` to put them under the matching fields. UI branches on `code`, never on message text.
+- Request functions are plain async functions in `features/<feature>/api/*.ts` (`getFeed`, `likePost`, `sendMessage`). They know URLs and payloads; they know nothing about React, TanStack Query or Zustand.
 - Keep TypeScript types for API responses in the feature's `schemas/`; validate untrusted shapes at the boundary with zod where it matters (auth, forms).
+
+### Where state lives
+
+Pick the first row that fits. Each piece of state has exactly one owner — never copy it into a second place.
+
+| Kind of state | Owner | Examples |
+| --- | --- | --- |
+| Data that comes from the API | **TanStack Query** cache | feed, post, comments, profile, followers, conversations, messages, notifications, unread counts, search results, current user |
+| State that should survive reload or be shareable | **URL** (route params, `searchParams`) | search query, active profile tab, feed tab, selected conversation, filters |
+| UI state used by one component (or a parent + its children) | **`useState` / `useReducer`** | dropdown open, hover, input value before submit, "show password" |
+| Form state | the form (controlled inputs or form library) + zod | login, register, composer text |
+| Client-only UI state shared across distant components | **Zustand** | sidebar/details panel open, compose dialog open, mobile sheet, unsent message drafts per conversation, toast queue |
+| Ephemeral realtime state that is never fetched | **Zustand** (`realtime-store`) | who is typing in which conversation, presence map, socket connection status |
+| Theme | `next-themes` | light / dark / system |
+
+Hard rules:
+
+- **Never put server data in Zustand** and never `useState(data)` a query result. If it came from the API, read it from the query cache.
+- Never call the API from inside a Zustand store. Stores hold UI state; mutations live in TanStack Query.
+- Don't reach for Zustand to avoid passing one or two props. Prop drilling through 1–2 levels is fine; use a store when unrelated parts of the tree need the same UI state.
+
+---
+
+## TanStack Query (server state)
+
+### Setup
+
+- Install `@tanstack/react-query` (and `@tanstack/react-query-devtools` as a dev dependency) when the first data feature lands.
+- One `QueryClient` factory in `apps/web/lib/query-client.ts`, provided by a `"use client"` `QueryProvider` in the root layout. On the server create a new client per request; in the browser keep a single instance (create it lazily, never at module scope shared across requests).
+- Default options (override per query only with a reason):
+
+```ts
+new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,          // SSR-hydrated data shouldn't refetch immediately
+      gcTime: 5 * 60_000,
+      retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,
+      refetchOnWindowFocus: true,
+    },
+    mutations: { retry: false },
+  },
+})
+```
+
+- Devtools render only in development.
+
+### Query keys and options
+
+- Each feature has a key factory in `features/<feature>/api/keys.ts`. Keys are arrays, go from general to specific, and are the only way to build keys:
+
+```ts
+export const postKeys = {
+  all: ['posts'] as const,
+  feed: (tab: FeedTab) => [...postKeys.all, 'feed', tab] as const,
+  detail: (id: string) => [...postKeys.all, 'detail', id] as const,
+  comments: (id: string) => [...postKeys.detail(id), 'comments'] as const,
+};
+```
+
+- Define reusable `queryOptions` / `infiniteQueryOptions` next to the keys (`feedQueryOptions(tab)`, `postQueryOptions(id)`) and use them everywhere — in hooks, in server prefetching and in `setQueryData`/`invalidateQueries` — so key, fetcher and types never drift.
+- Wrap them in small hooks named after the data: `useFeed(tab)`, `usePost(id)`, `useConversation(id)`, `useUnreadCounts()`. Components call hooks, never `useQuery` with inline keys.
+- Use `select` to derive view data (e.g. flatten infinite pages, count unread) instead of storing derived copies.
+
+### Server rendering with the App Router
+
+- Pages that need data on first paint prefetch on the server and hydrate:
+
+```tsx
+// app/(app)/home/page.tsx (Server Component)
+const queryClient = getQueryClient();
+await queryClient.prefetchInfiniteQuery(feedQueryOptions('for-you'));
+return (
+  <HydrationBoundary state={dehydrate(queryClient)}>
+    <Feed tab="for-you" />
+  </HydrationBoundary>
+);
+```
+
+- Server-side fetches forward the request cookies to the API (in a server-only helper). Never expose tokens to the client.
+- Client components then use the same hook (`useFeed`) and get the hydrated data without a loading flash.
+
+### Pagination
+
+- Feed, comments, replies, messages and notifications use `useInfiniteQuery` with the backend's cursor: `initialPageParam: null`, `getNextPageParam: (last) => last.nextCursor ?? undefined`.
+- Trigger the next page with an `IntersectionObserver` sentinel, show a skeleton card while `isFetchingNextPage`, and stop when `hasNextPage` is false ("You're all caught up").
+- Message history loads older pages upward (`fetchPreviousPage` / reversed list) and must keep the scroll position stable.
+- Simple, bounded lists (followers of a user, admin lists) may use page-based queries with `placeholderData: keepPreviousData`.
+
+### Mutations
+
+- One hook per action in the feature: `useLikePost()`, `useFollowUser()`, `useSendMessage()`, `useCreatePost()`, `useMarkNotificationRead()`.
+- Every user-facing mutation follows the optimistic pattern (see **Optimistic interactions**):
+
+```ts
+useMutation({
+  mutationFn: likePost,
+  onMutate: async ({ postId }) => {
+    await queryClient.cancelQueries({ queryKey: postKeys.all });
+    const previous = queryClient.getQueriesData({ queryKey: postKeys.all });
+    queryClient.setQueriesData({ queryKey: postKeys.all }, (old) => toggleLikeIn(old, postId));
+    return { previous };
+  },
+  onError: (_err, vars, ctx) => {
+    ctx?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    toast.error("Couldn't like that post.", { action: { label: 'Retry', onClick: () => mutate(vars) } });
+  },
+  onSettled: () => queryClient.invalidateQueries({ queryKey: postKeys.all, refetchType: 'none' }),
+});
+```
+
+- Prefer precise `setQueryData` updates from the mutation response over broad invalidation. Invalidate only the keys an action really affects, and never invalidate the feed in a way that reorders visible posts.
+- Updating a post must update it everywhere it appears (feed pages, detail, profile posts): write a small updater helper per entity (`updatePostInCaches`) instead of repeating cache surgery.
+- Use `mutation.isPending` for button state; never keep a separate `isLoading` in `useState`.
+- Use stable client ids (`crypto.randomUUID()`) for optimistic posts/messages and replace them with the server id on success.
+
+### Errors and auth
+
+- A global `QueryCache`/`MutationCache` `onError` handles `401` (clear the cache, redirect to `/login?next=…`). Feature code handles everything else.
+- Query errors render `ErrorState` with **Try again** (`refetch`); keep previously loaded pages visible.
+- On logout call `queryClient.clear()` and reset all Zustand stores.
+
+### Realtime and the cache
+
+- Socket events write into the cache with `setQueryData` (append a message to the conversation's first page, bump unread counts, mark a notification). They do not trigger full refetches.
+- New feed posts and notifications from the socket go into a **pending buffer** (in the realtime store) and are moved into the cache only when the user clicks the `NewItemsPill`.
+- After a reconnect, invalidate the queries that may have missed events (open conversation, notifications, unread counts).
+
+---
+
+## Zustand (client UI state)
+
+### When to use it
+
+Only for client-side state that several unrelated components need: layout toggles, dialogs opened from many places, drafts, the realtime buffers above. If only one component (or a parent and its children) uses it, keep `useState`. If it belongs in the URL, put it in the URL.
+
+### Stores
+
+- Small stores per concern, not one global store:
+  - `stores/ui-store.ts` — details panel open, compose dialog open, mobile sheets, sidebar collapsed.
+  - `stores/realtime-store.ts` — connection status, typing users per conversation, presence map, pending new posts/notifications.
+  - `features/messages/store.ts` — unsent drafts per conversation id.
+- Each store file exports one hook (`useUiStore`) with state and actions together. Actions are named verbs (`openCompose`, `closeCompose`, `setDraft`, `clearDraft`), and are the only way state changes; components never call `setState` directly.
+- Keep state minimal and serializable. Derive values with selectors instead of storing them.
+
+```ts
+type UiState = {
+  isComposeOpen: boolean;
+  isDetailsPanelOpen: boolean;
+  openCompose: () => void;
+  closeCompose: () => void;
+  toggleDetailsPanel: () => void;
+};
+
+export const useUiStore = create<UiState>()((set) => ({
+  isComposeOpen: false,
+  isDetailsPanelOpen: true,
+  openCompose: () => set({ isComposeOpen: true }),
+  closeCompose: () => set({ isComposeOpen: false }),
+  toggleDetailsPanel: () => set((s) => ({ isDetailsPanelOpen: !s.isDetailsPanelOpen })),
+}));
+```
+
+### Using stores
+
+- Always select the smallest slice: `useUiStore((s) => s.isComposeOpen)`. Never `useUiStore()` without a selector (re-renders on every change).
+- When selecting several values, use `useShallow` from `zustand/react/shallow`.
+- Actions can be read with a selector too (`useUiStore((s) => s.openCompose)`); they are stable.
+- Stores are used only in Client Components. Server Components never read a store.
+
+### Next.js / SSR rules
+
+- Module-level stores are fine for **client-only UI state** that starts with the same defaults for everyone (the stores above).
+- State that must be initialised from server data per request (rare) uses the context pattern: `createStore` inside a `"use client"` provider, created once per mount with `useRef`. Never write request-specific data into a module-level store on the server.
+- `persist` middleware only for harmless preferences and drafts (e.g. message drafts, details panel open). Use `partialize` to whitelist fields, a versioned `name` (`connectify-drafts-v1`), and guard against hydration mismatch (render the persisted value after mount). Never persist server data, auth data, tokens or anything personal beyond drafts.
+- Reset every store on logout (each store exposes `reset()`).
+
+### Testing
+
+- Test stores directly (call actions, assert state) without rendering. Reset the store in `beforeEach`.
+- Test query hooks with a fresh `QueryClient` per test (`retry: false`) and mock at the API-client boundary, not inside TanStack Query.
 
 ## Forms
 
@@ -840,14 +1027,20 @@ Rules:
 ## Authentication state
 
 - Auth uses httpOnly cookies set by the API. The client never reads or stores tokens.
-- Route protection happens on the server (layout/middleware for `(app)`); client-side checks are for UX only.
+  - `access_token` holds the short-lived JWT (15m) and `refresh_token` the opaque rotating token (7d). Both use `path=/` and `SameSite=Lax`, and are `Secure` in production. The API guard accepts the `access_token` cookie or an `Authorization: Bearer` header (Swagger, non-browser clients).
+  - Refresh rotates the token and the API revokes every session if a used token is replayed. Always refresh through the existing paths, never ad hoc:
+    - `apps/web/proxy.ts` refreshes on page navigation when the access cookie has expired.
+    - `apiRequest` runs one shared (single-flight) refresh on a 401, then retries once.
+- Route protection happens on the server. `apps/web/proxy.ts` (Next 16's middleware) is a cheap cookie check: it redirects to `/login?next=…` without a session and never calls `/auth/me`. The `(app)` layout prefetches `/auth/me` and redirects on 401, which is the authoritative check. `/login` and `/register` call `redirectIfSignedIn()` (`features/auth/api/auth.server.ts`), which asks `/auth/me` before sending a visitor to the app, so a stale cookie can't cause a redirect loop. Never redirect away from an auth page on a cookie alone. Client-side checks are for UX only.
+- Mutations where a 401 means "wrong credentials" (login, register, logout) set `meta: { skipAuthRedirect: true }`.
+- Only follow same-site `next` paths after login (`useNextPath`).
 - On a `401` from the API, clear the query cache and redirect to `/login?next=<current path>`.
 - Auth pages (`(auth)` group) use a separate, simpler layout: wordmark top-left, single centered column max 400px, no sidebars.
 
 ## Realtime
 
 - One socket connection, created in a client provider inside the `(app)` layout, in `apps/web/lib/socket.ts`. Feature code subscribes through small hooks (`useConversationEvents`, `useNotificationEvents`), never by touching the socket directly.
-- Incoming events **update the TanStack Query cache** (append message, bump unread count, set presence). Components re-render from the cache; they don't keep their own copy.
+- Incoming events that change API data **update the TanStack Query cache** (append message, bump unread count, mark notification). Ephemeral events that are never fetched (typing, presence, connection status) go to the Zustand `realtime-store`. Components re-render from those; they don't keep their own copy.
 - Realtime must never move content under the user's eyes:
   - New feed posts and notifications are announced with a pill ("2 new posts") and inserted only when the user clicks it.
   - Chat stays pinned to the bottom only if the user is already at the bottom; otherwise show a "New messages" jump button.
@@ -878,32 +1071,32 @@ Avoid: gradients (except skeleton shimmer), heavy shadows, glassmorphism, emoji 
 
 ### Color tokens
 
-All colors come from CSS variables in `packages/ui/src/styles/globals.css`, mapped onto the shadcn names. **Never hard-code hex/oklch values or use raw Tailwind palette classes (`bg-teal-600`, `text-gray-500`) in components.**
+All colors come from CSS variables in `packages/ui/src/styles/globals.css`, mapped onto the shadcn names. **Never hard-code hex/oklch values or use raw Tailwind palette classes (**`bg-teal-600`**,** `text-gray-500`**) in components.**
 
-| Token (shadcn name) | Role | Light | Dark |
-| --- | --- | --- | --- |
-| `--background` | page ground | `#F6F6F3` | `#0E0F11` |
-| `--card`, `--popover` | cards, menus, sidebars | `#FFFFFF` | `#16171A` |
-| `--muted` | subtle fills (comment bubble, search field) | `#F1F1ED` | `#1D1E22` |
-| `--accent` | hover fill for rows/ghost buttons | `#ECECE7` | `#24252A` |
-| `--border`, `--input` | hairlines / input borders | `#E5E5DF` / `#D4D4CC` | `#28292E` / `#383A40` |
-| `--foreground` | primary text | `#17181C` | `#ECECE8` |
-| `--muted-foreground` | secondary text, meta, timestamps | `#676A72` | `#93969D` |
-| `--primary` | brand teal: primary actions, selection, unread | `#0B6E63` | `#34B8A5` |
-| `--primary-foreground` | text on primary | `#FFFFFF` | `#04201C` |
-| `--ring` | focus ring | = primary | = primary |
-| `--destructive` | delete, errors | `#B42833` | `#F0707A` |
+| Token (shadcn name)    | Role                                           | Light                 | Dark                  |
+| ---------------------- | ---------------------------------------------- | --------------------- | --------------------- |
+| `--background`         | page ground                                    | `#F6F6F3`             | `#0E0F11`             |
+| `--card`, `--popover`  | cards, menus, sidebars                         | `#FFFFFF`             | `#16171A`             |
+| `--muted`              | subtle fills (comment bubble, search field)    | `#F1F1ED`             | `#1D1E22`             |
+| `--accent`             | hover fill for rows/ghost buttons              | `#ECECE7`             | `#24252A`             |
+| `--border`, `--input`  | hairlines / input borders                      | `#E5E5DF` / `#D4D4CC` | `#28292E` / `#383A40` |
+| `--foreground`         | primary text                                   | `#17181C`             | `#ECECE8`             |
+| `--muted-foreground`   | secondary text, meta, timestamps               | `#676A72`             | `#93969D`             |
+| `--primary`            | brand teal: primary actions, selection, unread | `#0B6E63`             | `#34B8A5`             |
+| `--primary-foreground` | text on primary                                | `#FFFFFF`             | `#04201C`             |
+| `--ring`               | focus ring                                     | = primary             | = primary             |
+| `--destructive`        | delete, errors                                 | `#B42833`             | `#F0707A`             |
 
 Product-specific tokens (add next to the shadcn ones and register them in `@theme inline`):
 
-| Token | Role | Light | Dark |
-| --- | --- | --- | --- |
-| `--brand-soft` | active nav item, selected conversation, chips | `#E2F0EC` | `#11302B` |
-| `--brand-ink` | text/links on light surfaces in brand color | `#09594F` | `#6AD8C6` |
-| `--unread` | background of unread notification rows | `#F3F8F6` | `#132421` |
-| `--like` / `--like-soft` | liked heart only | `#C42F50` / `#FBE8EC` | `#F2728B` / `#3A1B23` |
-| `--online` | presence dot | `#1E9150` | `#3FD07D` |
-| `--avatar-1…5` + `--avatar-1…5-fg` | initials avatar tints (teal, amber, slate, rose, olive) | see canvas | see canvas |
+| Token                              | Role                                                    | Light                 | Dark                  |
+| ---------------------------------- | ------------------------------------------------------- | --------------------- | --------------------- |
+| `--brand-soft`                     | active nav item, selected conversation, chips           | `#E2F0EC`             | `#11302B`             |
+| `--brand-ink`                      | text/links on light surfaces in brand color             | `#09594F`             | `#6AD8C6`             |
+| `--unread`                         | background of unread notification rows                  | `#F3F8F6`             | `#132421`             |
+| `--like` / `--like-soft`           | liked heart only                                        | `#C42F50` / `#FBE8EC` | `#F2728B` / `#3A1B23` |
+| `--online`                         | presence dot                                            | `#1E9150`             | `#3FD07D`             |
+| `--avatar-1…5` + `--avatar-1…5-fg` | initials avatar tints (teal, amber, slate, rose, olive) | see canvas            | see canvas            |
 
 Usage rules:
 
@@ -916,15 +1109,15 @@ Usage rules:
 
 Geist for everything; Geist Mono only for numbers that change in place (counts, times).
 
-| Style | Size / weight | Use |
-| --- | --- | --- |
-| Display | 28px / 700, tracking -0.025em | auth page titles |
-| Title | 22px / 650, tracking -0.02em | page titles (Home, Messages) |
-| Heading | 15px / 650 | card and section headings |
-| Body | 15px / 400, line-height 1.55 | posts, bios |
-| Message | 14.5–15px / 400, line-height 1.45 | chat bubbles |
-| Small | 13px | meta, buttons in lists, secondary text |
-| Caption | 12px | timestamps, hints, field errors |
+| Style   | Size / weight                     | Use                                    |
+| ------- | --------------------------------- | -------------------------------------- |
+| Display | 28px / 700, tracking -0.025em     | auth page titles                       |
+| Title   | 22px / 650, tracking -0.02em      | page titles (Home, Messages)           |
+| Heading | 15px / 650                        | card and section headings              |
+| Body    | 15px / 400, line-height 1.55      | posts, bios                            |
+| Message | 14.5–15px / 400, line-height 1.45 | chat bubbles                           |
+| Small   | 13px                              | meta, buttons in lists, secondary text |
+| Caption | 12px                              | timestamps, hints, field errors        |
 
 Use font weight and color for hierarchy before size. No all-caps labels.
 
@@ -940,17 +1133,51 @@ Use font weight and color for hierarchy before size. No all-caps labels.
 - Icon-only buttons always have `aria-label` (and a Tooltip on desktop).
 - Active nav items may use a lightly filled icon; everything else is stroke.
 
+### Motion
+
+Motion explains a change (something arrived, something was confirmed); it never decorates. Reference: the **Motion** section of the Design system board.
+
+Define these once as CSS variables in `globals.css` and use them through Tailwind; don't write ad-hoc durations or easings in components.
+
+| Token              | Value                                            | Use                                                                |
+| ------------------ | ------------------------------------------------ | ------------------------------------------------------------------ |
+| `--duration-fast`  | 120ms, `--ease-in-out` `cubic-bezier(.4,0,.2,1)` | hover, press, color/border changes                                 |
+| `--duration-base`  | 180ms, `--ease-out` `cubic-bezier(.2,.8,.2,1)`   | tabs, focus ring, content swapping in (fade)                       |
+| `--duration-enter` | 220–280ms, `--ease-out`                          | new post/notification, message bubble, realtime pill, panel, toast |
+| pop                | 360ms, once                                      | the heart when the user likes something — the only playful motion  |
+
+Patterns (keyframes live in `globals.css` next to the tokens):
+
+| Name     | Effect                                                   | Where                                                |
+| -------- | -------------------------------------------------------- | ---------------------------------------------------- |
+| `enter`  | fade + 8px down                                          | new post or notification inserted at the top         |
+| `msg-in` | fade + 8px up + scale .96, from the bubble's tail corner | newly sent/received message bubbles                  |
+| `drop`   | fade + 10px down + scale .96                             | "N new posts" pill                                   |
+| `panel`  | fade + 16px from the side                                | details panel, sheets                                |
+| `toast`  | fade + 12px up                                           | toasts                                               |
+| `pop`    | scale 1 → 1.3 → .94 → 1                                  | like heart, only when the user likes (not on load)   |
+| `fade`   | opacity only                                             | tab content, empty/loading/result states swapping in |
+
+Rules:
+
+- Animate only `opacity` and `transform`. Never animate `height`, `width`, `top` or margins, so nothing else on the page moves.
+- Only things that are new animate. Content present on first render, initial data, and items loaded by infinite scroll appear without animation.
+- Buttons press to `scale(.97)` on `:active`. Hover never moves or scales anything.
+- Exits are instant or a short fade. Nothing bounces, loops, parallaxes or plays on scroll. The only loops are skeleton shimmer, spinners and typing dots.
+- Use `tw-animate-css` / Base UI data attributes (`data-[starting-style]`, `data-[ending-style]`) for overlays (dialog, popover, dropdown, tooltip) with the same durations; don't add Framer Motion or another animation library.
+- Respect `prefers-reduced-motion: reduce`: cut every animation and transition to ~0ms (one global rule in `globals.css`). Essential state changes must still be visible without motion.
+
 ---
 
 ## Components
 
 Reuse these; extend with variants instead of forking.
 
-**Primitives (`packages/ui`):** Button, Input, Textarea, Label, Card, Dialog, AlertDialog, DropdownMenu, Popover, Tooltip, Tabs, Toast/Sonner, Skeleton, Switch, Checkbox, Badge, Separator, ScrollArea.
+**Primitives (**`packages/ui`**):** Button, Input, Textarea, Label, Card, Dialog, AlertDialog, DropdownMenu, Popover, Tooltip, Tabs, Toast/Sonner, Skeleton, Switch, Checkbox, Badge, Separator, ScrollArea.
 
 **Button variants:** `default` (primary teal), `outline`/`secondary`, `ghost`, `destructive` (solid red with white text for confirm-delete), `link`. Sizes: `sm` 32px, `default` 40px, `lg` 46px (auth forms), `icon` 40px. On touch layouts the hit area must be ≥ 44px even if the visual is smaller.
 
-**Shared product components (`apps/web/components/shared`):**
+**Shared product components (**`apps/web/components/shared`**):**
 
 - `UserAvatar` — initials or image, sizes 28/32/36/40/44/80/112, optional `presence="online" | "offline"` dot with label.
 - `AvatarStack` — overlapping avatars with `+N`.
@@ -995,15 +1222,15 @@ Use Tailwind defaults: `md` 768px, `lg` 1024px, `xl` 1280px.
 
 ## UX states (required for every data-driven view)
 
-| State | Rule |
-| --- | --- |
-| Loading | Skeletons shaped like the real content (avatar circle + text lines). Spinners only for small inline waits ("Loading older messages…"). Never a full-page spinner. |
-| Empty | `EmptyState` with a specific title ("No messages yet"), one helpful sentence and, when possible, the next action. |
-| Error | `ErrorState` or inline error with **Try again**. Keep already-loaded content visible. Never show raw server messages or stack traces. |
-| Disabled | Opacity ~0.45 + `cursor-not-allowed`; explain why when it isn't obvious. |
-| Hover | Rows/ghost buttons use `accent`; primary darkens slightly. No movement or scaling. |
-| Focus | Visible 2px `ring` with 2px offset on every interactive element (`focus-visible`). Never remove outlines without a replacement. |
-| Pending | In-flight items rendered in place with reduced opacity and a status word. |
+| State    | Rule                                                                                                                                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Loading  | Skeletons shaped like the real content (avatar circle + text lines). Spinners only for small inline waits ("Loading older messages…"). Never a full-page spinner. |
+| Empty    | `EmptyState` with a specific title ("No messages yet"), one helpful sentence and, when possible, the next action.                                                 |
+| Error    | `ErrorState` or inline error with **Try again**. Keep already-loaded content visible. Never show raw server messages or stack traces.                             |
+| Disabled | Opacity ~0.45 + `cursor-not-allowed`; explain why when it isn't obvious.                                                                                          |
+| Hover    | Rows/ghost buttons use `accent`; primary darkens slightly. No movement or scaling.                                                                                |
+| Focus    | Visible 2px `ring` with 2px offset on every interactive element (`focus-visible`). Never remove outlines without a replacement.                                   |
+| Pending  | In-flight items rendered in place with reduced opacity and a status word.                                                                                         |
 
 ---
 
@@ -1039,9 +1266,11 @@ Before finishing a frontend task, check:
 - Only tokens are used for color, radius and shadow; no raw hex or palette classes.
 - Existing primitives/shared components were reused; no near-duplicate components were added.
 - `"use client"` is limited to interactive leaves.
+- Server data is read only from TanStack Query (keys from the feature's key factory); Zustand holds only shared UI/ephemeral state and is read with selectors.
 - Loading, empty, error, disabled, hover and focus states exist.
 - Optimistic updates roll back on error with a Retry toast.
 - Realtime updates don't shift content unexpectedly.
+- Motion uses the shared tokens, animates only new items, and is disabled under reduced motion.
 - Works at 375px, 768px and 1280px+ widths, in light and dark.
 - Keyboard and screen-reader basics pass (labels, focus, landmarks, aria states).
 - `pnpm --filter web lint` and `pnpm --filter web typecheck` pass.

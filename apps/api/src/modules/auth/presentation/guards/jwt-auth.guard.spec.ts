@@ -18,10 +18,13 @@ class TestController {
 function contextFor(
   handler: () => unknown,
   headers: Record<string, string> = {},
+  cookies: Record<string, string> = {},
 ) {
-  const request: { headers: Record<string, string>; user?: unknown } = {
-    headers,
-  };
+  const request: {
+    headers: Record<string, string>;
+    cookies: Record<string, string>;
+    user?: unknown;
+  } = { headers, cookies };
   const context = {
     getHandler: () => handler,
     getClass: () => TestController,
@@ -68,6 +71,29 @@ describe('JwtAuthGuard', () => {
     });
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(request.user).toEqual({ id: 'user-1' });
+  });
+
+  it('reads the token from the access_token cookie', async () => {
+    verifyAccessToken.mockResolvedValue({ sub: 'user-1' });
+    const { context, request } = contextFor(
+      protectedRoute,
+      {},
+      { access_token: 'from-cookie' },
+    );
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(verifyAccessToken).toHaveBeenCalledWith('from-cookie');
+    expect(request.user).toEqual({ id: 'user-1' });
+  });
+
+  it('prefers the Bearer header over the cookie', async () => {
+    verifyAccessToken.mockResolvedValue({ sub: 'user-1' });
+    const { context } = contextFor(
+      protectedRoute,
+      { authorization: 'Bearer from-header' },
+      { access_token: 'from-cookie' },
+    );
+    await guard.canActivate(context);
+    expect(verifyAccessToken).toHaveBeenCalledWith('from-header');
   });
 
   it('lets @Public() routes through without a token', async () => {
