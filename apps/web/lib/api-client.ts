@@ -113,7 +113,7 @@ const NO_REFRESH_PATHS = new Set([
 // token is rotated once (presenting it twice revokes every session).
 let refreshInFlight: Promise<boolean> | null = null
 
-function refreshSession(): Promise<boolean> {
+export function refreshSession(): Promise<boolean> {
   refreshInFlight ??= sendRequest("/api/auth/refresh", { method: "POST" })
     .then(
       () => true,

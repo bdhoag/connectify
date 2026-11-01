@@ -21,7 +21,7 @@ function redirectToLogin(request: NextRequest) {
 
 // Exchanges the refresh cookie for a new pair of auth cookies. Returns the
 // raw Set-Cookie headers, or null when the session can't be renewed.
-async function refreshSession(refreshToken: string): Promise<string[] | null> {
+async function requestRefresh(refreshToken: string): Promise<string[] | null> {
   try {
     const response = await fetch(`${API_URL}/api/auth/refresh`, {
       method: "POST",
@@ -32,6 +32,32 @@ async function refreshSession(refreshToken: string): Promise<string[] | null> {
   } catch {
     return null
   }
+}
+
+// The API rotates the refresh token on every use and revokes every session if
+// an old one is presented again. Several page requests (link prefetches, other
+// tabs) can reach this proxy with the same expired session at once, so they
+// share one refresh per refresh token. A successful result stays reusable for
+// a short window, because requests sent before the browser stored the new
+// cookies still carry the old token. This is per server process and keeps the
+// token in memory only for that window; failures are never kept.
+const REFRESH_REUSE_WINDOW_MS = 10_000
+const refreshes = new Map<string, Promise<string[] | null>>()
+
+function refreshSession(refreshToken: string) {
+  const shared = refreshes.get(refreshToken)
+  if (shared) return shared
+
+  const attempt = requestRefresh(refreshToken).then((setCookies) => {
+    if (setCookies) {
+      setTimeout(() => refreshes.delete(refreshToken), REFRESH_REUSE_WINDOW_MS)
+    } else {
+      refreshes.delete(refreshToken)
+    }
+    return setCookies
+  })
+  refreshes.set(refreshToken, attempt)
+  return attempt
 }
 
 // Route protection runs on the server for every page navigation. It is a cheap

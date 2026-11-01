@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
 
 import { Wordmark } from "@/components/shared/wordmark"
@@ -7,6 +6,7 @@ import { getMeOnServer } from "@/features/auth/api/auth.server"
 import { meQueryOptions } from "@/features/auth/api/keys"
 import { CurrentUser } from "@/features/auth/components/current-user"
 import { LogoutButton } from "@/features/auth/components/logout-button"
+import { SessionRecovery } from "@/features/auth/components/session-recovery"
 import { ApiError } from "@/lib/api-client"
 import { getQueryClient } from "@/lib/query-client"
 
@@ -24,9 +24,11 @@ export default async function AppLayout({
       queryFn: getMeOnServer,
     })
   } catch (error) {
-    // proxy.ts normally catches this first; this covers a session revoked
-    // between the proxy check and the render.
-    if (error instanceof ApiError && error.status === 401) redirect("/login")
+    // proxy.ts only checks that a cookie exists, so this is where a stale or
+    // revoked session shows up. Try to renew it in the browser before giving up.
+    if (error instanceof ApiError && error.status === 401) {
+      return <SessionRecovery />
+    }
     throw error
   }
 
